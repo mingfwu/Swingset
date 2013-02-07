@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style>
+
+body {
+  font: 10px sans-serif;
+}
+
+.infobox {
+        position: absolute;
+        width: 200px;
+        padding: 10px;
+        background-color: rgba(255,255,255,.75);
+   	display: none;
+}
+
+</style>
+<body>
+
+<div class="infobox"><p></p></div>
+<script src="d3.v3.js"></script>
+<script>
+
+var margin = {top: 20, right: 20, bottom: 30, left: 50},
+    header = {height: 50},
+    width = ||PLACEHOLDER_WIDTH|| - margin.left - margin.right,
+    height = ||PLACEHOLDER_HEIGHT|| - margin.top - margin.bottom;
+
+var color = ||PLACEHOLDER_SCALE||
+
+var x = d3.scale.linear()
+  .range([0,width]);
+
+var y = d3.scale.ordinal()
+  .rangeBands([0,height - header.height]);
+
+var chart = d3.select("body").append("svg")
+    .attr("class", "chart")
+    .attr("width", width + margin.left + margin.right)
+    .attr("height", height + margin.top + margin.bottom)
+    .append("g")
+    .attr("transform", "translate("+margin.left+"," + (margin.top + header.height)+")");
+
+function sortByValueAsc(a,b) {
+        if (parseFloat(a.value) < parseFloat(b.value))
+                return -1;
+        if (parseFloat(a.value) > parseFloat(b.value))
+                return 1;
+        return 0;
+}
+
+
+function sortByValueDsc(b,a) {
+        if (parseFloat(a.value) < parseFloat(b.value))
+                return -1;
+        if (parseFloat(a.value) > parseFloat(b.value))
+                return 1;
+        return 0;
+}
+
+function sortByNameAsc(a,b) {
+        if (a.name.toUpperCase() < b.name.toUpperCase())
+                return -1;
+        if (a.name.toUpperCase() >  b.name.toUpperCase())
+                return 1;
+        return 0;
+}
+
+function sortByNameDsc(b,a) {
+        if (a.name.toUpperCase() < b.name.toUpperCase())
+                return -1;
+        if (a.name.toUpperCase() > b.name.toUpperCase())
+                return 1;
+        return 0;
+}
+
+d3.csv("||PLACEHOLDER_DATAFILE||", function(error,data) {
+
+  ||PLACEHOLDER_ENABLE_SORT||data.sort(||PLACEHOLDER_SORTTYPE||);
+  ||PLACEHOLDER_ENABLE_TRUNCATE||data = data.slice(0,||PLACEHOLDER_MAXRESULTS||);
+
+  domainvalues = [];
+  namevalues = [];
+
+  data.forEach(function(d) {
+    domainvalues.push(parseFloat(d.value));
+    namevalues.push(d.name);
+  });
+
+  x.domain([0,d3.max(domainvalues)]);
+  y.domain(namevalues);
+
+   chart.selectAll("rect")
+      .data(data)
+    .enter().append("rect")
+      .attr("y", function(d) { return y(d.name); })
+      .attr("width", function(d) { return x(parseFloat(d.value)); })
+      .attr("height", y.rangeBand())
+      .attr("name", function(d) { return d.name;})
+      .style("fill", function(d) { return color(d.name)})
+
+  chart.append("g")
+    .attr("id", "header")
+    .attr("width", width)
+    .attr('class', 'header')
+    .append("text")
+    .attr("x", 5)
+    .attr("y", -25)
+    .style("font-size", "20px")
+    .text("||PLACEHOLDER_HEADER||");
+
+   legend = chart.append('g')
+     .attr('id','legend');
+  
+   legend.selectAll("text")
+      .data(data)
+    .enter().append("text")
+     .attr("x", 3)
+     .attr("y", function(d) { return y(d.name)+ y.rangeBand() / 2})
+     .text(function(d) { return d.name+ " ["+d.value+"]"; })
+});
+
+</script>

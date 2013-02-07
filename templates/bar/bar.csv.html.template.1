@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style>
+
+body {
+  font: 10px sans-serif;
+}
+
+</style>
+<body>
+<script src="d3.v3.js"></script>
+<script>
+
+var margin = {top: 20, right: 20, bottom: 30, left: 50},
+    width = ||PLACEHOLDER_WIDTH|| - margin.left - margin.right,
+    height = ||PLACEHOLDER_HEIGHT|| - margin.top - margin.bottom;
+
+var color = ||PLACEHOLDER_SCALE||
+
+var x = d3.scale.linear()
+  .range([0,width]);
+
+var y = d3.scale.ordinal()
+  .rangeBands([0,height]);
+
+var chart = d3.select("body").append("svg")
+    .attr("class", "chart")
+    .attr("width", width + margin.left + margin.right)
+    .attr("height", height + margin.top + margin.bottom);
+
+
+d3.csv("||PLACEHOLDER_DATAFILE||", function(error,data) {
+
+  var domainvalues = []; 
+
+  data.forEach(function(d) { 
+    domainvalues.push(parseFloat(d.value));
+  });
+
+  x.domain([0,d3.max(domainvalues)]);
+  y.domain(domainvalues);
+
+   chart.selectAll("rect")
+      .data(data)
+    .enter().append("rect")
+      .attr("y", function(d) { return y(parseFloat(d.value)); })
+      .attr("width", function(d) { return x(parseFloat(d.value)); })
+      .attr("height", y.rangeBand())
+      .style("fill", function(d) { return color(d.name)});
+  
+   chart.selectAll("text")
+      .data(data)
+    .enter().append("text")
+     .attr("x", function(d) { return x(parseFloat(d.value)); })
+     .attr("y", function(d) { return y(parseFloat(d.value)) + y.rangeBand() / 2})
+     .attr("dx", -3) // padding-right
+     .attr("dy", ".35em") // vertical-align: middle
+     .attr("text-anchor", "end") // text-align: right
+     .text(function(d) { return d.name; });
+
+});
+
+</script>
