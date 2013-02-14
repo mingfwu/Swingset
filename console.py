@@ -20,13 +20,13 @@ def main():
 	globals = setGlobals(globalConfigFile)
 
 	# Load Template Config
-	templateDefaults, layout, graphs = loadLayout(configFile)	
+	templateDefaults, layout, graphs, outputfile = loadLayout(configFile)	
 	
 	# Render graphs
 	renderGraphs(graphs, templateDefaults)
 
 	# Render layout
-	renderHTML(layout, graphs, templateDefaults)
+	renderHTML(layout, graphs, templateDefaults, outputfile)
 
 def setGlobals(configFile):
 	config = ConfigParser.ConfigParser()
@@ -66,6 +66,8 @@ def loadLayout(configFile):
 	for layoutrecord in config.items("layout"):
 		if layoutrecord[0] == "rows":
 			rownames = layoutrecord[1].split(",")
+		if layoutrecord[0] == "outputfile":
+			outputfile = layoutrecord[1]
 		for rowname in rownames:
 			row = []
 			for rowrecord in config.items(rowname):
@@ -75,7 +77,10 @@ def loadLayout(configFile):
 					graphs[graph] = loadGraph(config,graph)
 					row.append(graph)
 			layout.append(row)
-	return defaults,layout,graphs
+
+	if outputfile == "":
+		outputfile = defaults["outputfile"]
+	return defaults,layout,graphs,outputfile
 	
 
 def loadConfigs(configFile):
@@ -165,8 +170,8 @@ def renderRow(f,row,graphs,defaults):
 	f.write("</div>\n")
 	
 
-def renderHTML(layout, graphs, defaults):
-	target = "index.html"
+def renderHTML(layout, graphs, defaults, outputfile):
+	target = outputfile;
 	f = open(target, 'w')
 	f.write("<html> \n")
 	f.write("<head/> \n")
