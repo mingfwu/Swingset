@@ -241,14 +241,17 @@ def processData(datafile,configs):
 	metrics = dict() 
 	count = 0
 	for line in f:
-		json_object = json.loads(line)
-		# Set conditional for time series axes
-		field="interaction.author.username"
-		field="interaction.tags"
-		#extractMetricsFromField(json_object,field)
-		metrics = extractMetrics(json_object, metrics, configs)
-		# Store: date, name, value
-		# Store: name, value
+		try: 
+			json_object = json.loads(line)
+			# Set conditional for time series axes
+			field="interaction.author.username"
+			field="interaction.tags"
+			#extractMetricsFromField(json_object,field)
+			metrics = extractMetrics(json_object, metrics, configs)
+			# Store: date, name, value
+			# Store: name, value
+		except:
+			print "ERROR reading line",count
 		count = count + 1
 		if count % 1000 == 0:
 			print count,"lines processed"
