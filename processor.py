@@ -23,12 +23,13 @@ def main():
 
 	# Load Configs
 	configs, reportConfigs = loadConfigs(configFile)	
-	print configs, reportConfigs
+	#print configs, reportConfigs
 	
 	# Run
 	metrics = processData(dataFile,reportConfigs)
-	print metrics
-	#outputData(metrics,reportConfigs)
+	#print metrics
+
+	outputData(metrics,reportConfigs)
 
 def setGlobals(configFile):
 	config = ConfigParser.ConfigParser()
@@ -95,7 +96,7 @@ def validateOperationConfig(reportname, opname, configItems, params):
 
 
 def loadOperation(reportname,opname,config):
-	opParams = ["action","target","legend","filter"]
+	opParams = ["action","target","legend","filter","values","comparator"]
 	operation = {}
 	operation["_config"] = reportname 
 	operation["_operation"] = opname
@@ -162,13 +163,18 @@ def retrieveData(jsondata,field):
 	jsondata = cleanseData(jsondata)
 	return jsondata
 
-def extractMetric(operation, json, records, value):
+def extractMetric(operation, json, records, value, key=None):
+	print "IN : extractMetric"
 	action = operation["action"]
 
-	if operation.has_key("legend"):
-		legend = operation["legend"]
+	# MW: This is suspect...
+	if not key == None:
+		legend = key
 	else:
-		legend = operation["target"]
+		if operation.has_key("legend"):
+			legend = operation["legend"]
+		else:
+			legend = operation["target"]
 
 	if action == "count":
 		if records.has_key(legend):
@@ -205,6 +211,64 @@ def extractMetric(operation, json, records, value):
 		else:
 			records[legend] = { global_cfg["avgkey"] : [value] }
 	return records
+
+def extractKeys(operation, json):
+	#print "IN: extractKeys"
+	values = retrieveData(json,operation["target"])	
+	print values
+	return values
+
+def filterData(operation, json, keys):
+	#print "IN: filterData"
+	action = operation["action"]
+	if action == "exclude_key" or action == "exclude_data":
+		# Assume we pass the data unless otherwise instructed
+		proceed = True
+	else:
+		proceed = False
+	if action == "exclude_key" or action == "include_key":
+		print operation
+		specifiedKeys = operation["values"].split(",")
+		print specifiedKeys
+		for key in specifiedKeys:
+			print key
+			if key in keys:
+				if action == "exclude_key":
+					proceed = False
+				if action == "include_key":
+					proceed = True
+				print "FILTER:", proceed
+				return proceed
+	if action == "exclude_data" or action == "include_data":
+		dataFilters = operation["values"].split(",")
+		data = rerieveData(json, operation["target"])
+		filtertype = operation["comparator"]
+		# comparator can be equals, contains, gt, ge, lt, le
+		for filter in dataFilters:
+			for record in data:
+				criteriaMet = False;
+				if filtertype == "equals" and record == filter:
+					criteriaMet = True
+				elif filtertype == "contains" and record.find(filter) != -1:
+					criteriaMet = True
+				elif filtertype == "gt" and float(record) > float(filter):
+					criteriaMet = True
+				elif filtertype == "ge" and float(record) >= float(filter):
+					criteriaMet = True
+				elif filtertype == "lt" and float(record) < float(filter):
+					criteriaMet = True
+				elif filtertype == "le" and float(record) <= float(filter):
+					criteriaMet = True
+				if action == "exclude_data" and criteriaMet:
+					proceed = False
+				if action == "include_data" and criteriaMet:
+					proceed = True
+				return proceed
+	return proceed
+	
+
+				 
+	
 	
 
 def executeOperation(operation, json, records, keys):
@@ -226,8 +290,13 @@ def executeOperation(operation, json, records, keys):
 	if action == "sum" or action == "average" or action == "mean" or action == "count" or action == "uniquecount":
 		# Retrieve the data for the target:
 		values = retrieveData(json,operation["target"])
-		for value in values:
-			records = extractMetric(operation, json, records, value)
+		if keys == None:
+			for value in values:
+				records = extractMetric(operation, json, records, value)
+		else:
+			for key in keys:
+				for value in values:
+					records = extractMetric(operation, json, records, value, key)
 
 	if action == "exclude_data" or action == "include_data" or action == "exclude_key" or action == "include_key":
 		proceed = filterData(operation, json, keys)
@@ -239,7 +308,10 @@ def extractReportMetrics(json, report, records):
 	operations = report["operations"]
 	keys = None
 	for operation in operations:
-		proceed, keys, records= executeOperation(operation, json, records, keys)
+		proceed, keys, records = executeOperation(operation, json, records, keys)
+		if not proceed:
+			print "extractReportMetric : criteria not met"
+			break
 
 	outputData = records
 	return outputData
@@ -351,44 +423,48 @@ def writeFormatData(record,writer,type,headers=[]):
 def outputData(metrics,configs):
 	files = dict()
 	#print metrics
-	for config in configs:
-		config = config.split(":")
-		outputFile = config[0]
-		outputType = config[1]
-		graphType = config[2]
-		metricType = config[3]
+	for report in configs:
+		print report
+                outputfile = report["file"]
+                outputtype = report["format"]
+                graphtype = report["type"]
 
-		if graphType == "line":
+		# The metric type will be determined by the last operation executed
+		finalOperation = report["operations"][len(report["operations"])-1]
+		print finalOperation
+		metrictype = finalOperation["action"]
+
+		if graphtype == "line":
 			header = ["date", "name", "value"]
 		else:
 			header = ["name","value"]
 		
 	
-		if files.has_key(outputFile):
+		if files.has_key(outputfile):
 			continue;
 			# Append to the existing file
-			#f = open(outputFile,'ab');
+			#f = open(outputfile,'ab');
 		else:
 			# Overwrite the existing file
-			f = open(outputFile,'wb');
+			f = open(outputfile,'wb');
 
-		outputWriter = f
-		if outputType == "csv":
-			outputWriter = csv.writer(f)
-		if outputType == "tsv":
+		outputwriter = f
+		if outputtype == "csv":
+			outputwriter = csv.writer(f)
+		if outputtype == "tsv":
 			return;
-		if outputType == "json":
+		if outputtype == "json":
 			return
 
 		# write the header if necessary:
-		if not files.has_key(outputFile):
-			files[outputFile] = outputFile
-			writeFormatData(header,outputWriter,outputType)
+		if not files.has_key(outputfile):
+			files[outputfile] = outputfile 
+			writeFormatData(header,outputwriter,outputtype)
 			
-		if metrics.has_key(outputFile):
-			data = metrics[outputFile]
+		if metrics.has_key(outputfile):
+			data = metrics[outputfile]
 
-			writeData(graphType,data,outputWriter,outputType,metricType);
+			writeData(graphtype,data,outputwriter,outputtype,metrictype);
 		
 		f.close()
 
