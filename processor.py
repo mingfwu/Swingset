@@ -96,7 +96,7 @@ def validateOperationConfig(reportname, opname, configItems, params):
 
 
 def loadOperation(reportname,opname,config):
-	opParams = ["action","target","legend","filter","values","comparator"]
+	opParams = ["action","target","legend","filter","values","comparator","min_length","max_length"]
 	operation = {}
 	operation["_config"] = reportname 
 	operation["_operation"] = opname
@@ -212,9 +212,31 @@ def extractMetric(operation, json, records, value, key=None):
 			records[legend] = { global_cfg["avgkey"] : [value] }
 	return records
 
+def extractTokens(operation, values):
+	if operation.has_key("min_length"):
+		minLength = operation["min_length"]
+	else:
+		minLength = 4
+	if operation.has_key("max_length"):
+		maxLength = operation["max_length"]
+	else:
+		maxLength = 100
+
+	tokens = [];
+	for value in values:
+		# Need to replace commas for CSV formatting
+		valuetokens = value.replace(',',' ').split(' ')
+		for token in valuetokens:
+			if len(token) >= minLength and len(token) <= maxLength:
+				tokens.append(token)
+		
+	return tokens
+
 def extractKeys(operation, json):
 	#print "IN: extractKeys"
 	values = retrieveData(json,operation["target"])	
+	if operation["action"] == "return_tokens":
+		values = extractTokens(operation, values)
 	return values
 
 def filterData(operation, json, keys):
@@ -284,7 +306,7 @@ def executeOperation(operation, json, records, keys):
 
 	action = operation["action"]
 	proceed = True
-	if action == "return":
+	if action == "return" or action == "return_tokens":
 		keys = extractKeys(operation, json)
 
 	if action == "sum" or action == "average" or action == "mean" or action == "count" or action == "uniquecount":
