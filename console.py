@@ -64,19 +64,19 @@ def loadLayout(configFile):
 		
 
 	for layoutrecord in config.items("layout"):
-		if layoutrecord[0] == "rows":
-			rownames = layoutrecord[1].split(",")
 		if layoutrecord[0] == "outputfile":
 			outputfile = layoutrecord[1]
-		for rowname in rownames:
-			row = []
-			for rowrecord in config.items(rowname):
-				if rowrecord[0] == "graphs":
-					graphnames = rowrecord[1].split(",")
-				for graph in graphnames:
-					graphs[graph] = loadGraph(config,graph)
-					row.append(graph)
-			layout.append(row)
+		if layoutrecord[0] == "rows":
+			rownames = layoutrecord[1].split(",")
+			for rowname in rownames:
+				row = []
+				for rowrecord in config.items(rowname):
+					if rowrecord[0] == "graphs":
+						graphnames = rowrecord[1].split(",")
+					for graph in graphnames:
+						graphs[graph] = loadGraph(config,graph)
+						row.append(graph)
+				layout.append(row)
 
 	if outputfile == "":
 		outputfile = defaults["outputfile"]
