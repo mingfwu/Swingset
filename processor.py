@@ -164,7 +164,7 @@ def retrieveData(jsondata,field):
 	return jsondata
 
 def extractMetric(operation, json, records, value, key=None):
-	print "IN : extractMetric"
+	#print "IN : extractMetric"
 	action = operation["action"]
 
 	# MW: This is suspect...
@@ -204,7 +204,7 @@ def extractMetric(operation, json, records, value, key=None):
 			records[legend] = float(records[legend]) + float(value)
 		else:
 			records[legend] = float(value)
-	elif action == "avg":
+	elif action == "average":
 		value = float(value)
 		if records.has_key(legend):
 			records[legend][global_cfg["avgkey"]].append(value)
@@ -215,30 +215,30 @@ def extractMetric(operation, json, records, value, key=None):
 def extractKeys(operation, json):
 	#print "IN: extractKeys"
 	values = retrieveData(json,operation["target"])	
-	print values
 	return values
 
 def filterData(operation, json, keys):
 	#print "IN: filterData"
 	action = operation["action"]
-	if action == "exclude_key" or action == "exclude_data":
-		# Assume we pass the data unless otherwise instructed
-		proceed = True
-	else:
+	if action == "include_data":
+		# Only pass the data if we match the filter
 		proceed = False
+	else:
+		proceed = True
 	if action == "exclude_key" or action == "include_key":
-		print operation
 		specifiedKeys = operation["values"].split(",")
-		print specifiedKeys
+		returnedKeys = []
 		for key in specifiedKeys:
-			print key
 			if key in keys:
-				if action == "exclude_key":
-					proceed = False
 				if action == "include_key":
-					proceed = True
-				print "FILTER:", proceed
-				return proceed
+					# This is a desired key. include it
+					returnedKeys.append(key)
+			elif action == "exclude_key":
+				# We didn't match the key so include it
+				returnedKeys.append(keyu)
+		if len(returnedKeys) == 0:
+			proceed = False;
+		return proceed, returnedKeys
 	if action == "exclude_data" or action == "include_data":
 		dataFilters = operation["values"].split(",")
 		data = rerieveData(json, operation["target"])
@@ -299,7 +299,7 @@ def executeOperation(operation, json, records, keys):
 					records = extractMetric(operation, json, records, value, key)
 
 	if action == "exclude_data" or action == "include_data" or action == "exclude_key" or action == "include_key":
-		proceed = filterData(operation, json, keys)
+		proceed, keys = filterData(operation, json, keys)
 
 	return proceed, keys, records
 
@@ -310,7 +310,7 @@ def extractReportMetrics(json, report, records):
 	for operation in operations:
 		proceed, keys, records = executeOperation(operation, json, records, keys)
 		if not proceed:
-			print "extractReportMetric : criteria not met"
+			#print "extractReportMetric : criteria not met"
 			break
 
 	outputData = records
@@ -424,14 +424,12 @@ def outputData(metrics,configs):
 	files = dict()
 	#print metrics
 	for report in configs:
-		print report
                 outputfile = report["file"]
                 outputtype = report["format"]
                 graphtype = report["type"]
 
 		# The metric type will be determined by the last operation executed
 		finalOperation = report["operations"][len(report["operations"])-1]
-		print finalOperation
 		metrictype = finalOperation["action"]
 
 		if graphtype == "line":
