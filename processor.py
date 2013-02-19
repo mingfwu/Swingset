@@ -22,11 +22,13 @@ def main():
 	globals = setGlobals(globalConfigFile)
 
 	# Load Configs
-	configs = loadConfigs(configFile)	
+	configs, reportConfigs = loadConfigs(configFile)	
+	print configs, reportConfigs
 	
 	# Run
-	metrics = processData(dataFile,configs)
-	outputData(metrics,configs)
+	metrics = processData(dataFile,reportConfigs)
+	print metrics
+	#outputData(metrics,reportConfigs)
 
 def setGlobals(configFile):
 	config = ConfigParser.ConfigParser()
@@ -39,16 +41,72 @@ def setGlobals(configFile):
 	
 
 def loadConfigs(configFile):
-	f = open(configFile, 'r')
-	configs = []
-	for line in f:
-		# Ignore comments and empty lines
-		if not line.strip().find("#") == 0 and len(line.strip()) > 0:
-			configs.append(line)
-			print "LOADED CONFIG:",line
+	config = ConfigParser.ConfigParser()
+	config.readfp(open(configFile))
+	for record in config.items("config"):
+		if record[0] == "reports": 
+			configs=record[1].split(',')
 
-	f.close()
-	return configs
+	reportConfigs = [];
+	for item in configs:
+		print "Loading config :",item
+		reportConfig = loadReportConfig(item, config.items(item))
+		reportConfigs.append(reportConfig)
+	
+
+	return configs, reportConfigs
+
+def validateReportConfig(name, configItems):
+	validConfig = True
+	configParams = [ "operations", "file", "format", "type" ]
+	reportConfig = {}
+	for param in configParams:
+		if not configItems.has_key(param):
+			print "ERROR:",name,"is missing value for",param
+			validConfig = False
+		else:
+			reportConfig[param] = configItems[param]	
+	return validConfig, reportConfig
+
+	
+def loadReportConfig(name, config):
+	configItems = {}
+	for item in config:
+		configItems[item[0]] = item[1]	
+
+	validConfig, reportConfig = validateReportConfig(name, configItems)
+	operations = []
+
+	for operation in configItems["operations"].split(","):
+		operations.append(loadOperation(name, operation,configItems))
+
+	reportConfig["operations"] = operations
+
+	return reportConfig
+
+	
+def validateOperationConfig(reportname, opname, configItems, params): 
+	validConfig = True
+	#for param in params:
+	#	if not configItems.has_key(param):
+	#		print "ERROR:",reportname,":",opname,"is missing value for",param
+	#		validConfig = False
+	return validConfig
+
+
+def loadOperation(reportname,opname,config):
+	opParams = ["action","target","legend","filter"]
+	operation = {}
+	operation["_config"] = reportname 
+	operation["_operation"] = opname
+	for param in opParams:
+		paramName = opname+"_"+param
+		if config.has_key(paramName):
+			operation[param] = config[paramName]
+
+	validateOperationConfig(reportname, opname, operation, opParams)
+	return operation
+	
 
 def validateFile(file): 
 	if not os.path.isfile(file):
@@ -78,136 +136,129 @@ def calculateInterval(date,intervalVal, format):
 def traverseHierarchy(data,fieldName):
 	return data[fieldName]
 
+def cleanseData(jsondata):
+	if not type(jsondata) == type([]):
+		jsondata = [jsondata]
+	count = 0
+	while count < len(jsondata):
+		if type(jsondata[count]) == type({}):
+			jsondata.pop(count)
+		else:
+			count = count + 1
+	return jsondata
+
 def retrieveData(jsondata,field):
 	fieldHierarchy = field.split(".")
 	for subField in fieldHierarchy:
-		if not subField == None:
+		if type(jsondata) == type([]):
+			newrecords = []
+			for record in jsondata:
+				if record.has_key(subField):
+					newrecords.append(traverseHierarchy(record, subField))
+			jsondata = newrecords	
+		else:
 			jsondata = traverseHierarchy(jsondata,subField)
+
+	jsondata = cleanseData(jsondata)
 	return jsondata
 
-def processField(field):
-	fieldName = field.split("|")[0].strip()
-	if len(field.split("|")) > 1:
-		prettyName = field.split("|")[1].strip()
-	else:
-		prettyName = fieldName.strip()
-	return fieldName, prettyName 
+def extractMetric(operation, json, records, value):
+	action = operation["action"]
 
-def processAction(action,records,key,prettyName,value=None):
-	#if action == "avg" or action == "sum":
-	#	print action, key, value
+	if operation.has_key("legend"):
+		legend = operation["legend"]
+	else:
+		legend = operation["target"]
+
 	if action == "count":
-		if records.has_key(key):
-			records[key] = records[key] + 1
+		if records.has_key(legend):
+			records[legend] = records[legend] + 1
 		else:
-			records[key] = 1
-	elif action == "sum":
-		if records.has_key(key):
-			records[key] = float(records[key]) + float(value)
-		else:
-			records[key] = float(value)
-	elif action == "totalcount":
-		if records.has_key(prettyName):
-			records[prettyName] = records[prettyName] + 1
-		else:
-			records[prettyName] = 1
+			records[legend] = 1
+
 	elif action == "uniquecount":
-		if records.has_key(prettyName):
-			keys = records[prettyName]["keys"]
-			if not keys.has_key(key):
-				keys[key] = 1
+		# Check to see if this is our first uniquecount value or not
+		if records.has_key(legend):
+			keys = records[legend]["keys"]
+
+			# Check to see if the value being checked for uniqueness exists or not
+			if not keys.has_key(value):
+				keys[value] = 1
+			else:
+				# We might as well append it here. 
+				keys[value] = keys[value] + 1
+
 		else:
 			keys = dict()
-			keys[key] = 1
-		records[prettyName] = { global_cfg["uniquekey"] : len(keys), "keys" : keys }
-	elif action == "avg":
-		if value == None:
-			value = float(key)
-		else: 
-			value = float(value)
-		if records.has_key(key):
-			records[key][global_cfg["avgkey"]].append(value)
+			keys[value] = 1
+		records[legend] = { global_cfg["uniquekey"] : len(keys), "keys" : keys }
+
+	elif action == "sum":
+		if records.has_key(legend):
+			records[legend] = float(records[legend]) + float(value)
 		else:
-			records[key] = { global_cfg["avgkey"] : [value] }
-
+			records[legend] = float(value)
+	elif action == "avg":
+		value = float(value)
+		if records.has_key(legend):
+			records[legend][global_cfg["avgkey"]].append(value)
+		else:
+			records[legend] = { global_cfg["avgkey"] : [value] }
 	return records
-
-def extractMetricsFromField(json,fields,currentValues,action="count"):
-	# field: fieldname|prettyname:subvalue|prettyname,subvalue|prettyname:fieldname2
-	# split on :, field 0
-	# insert logic here to process the field and values
-	# if field contains values... 
-	primaryFieldName, primaryPrettyFieldName = processField(fields[0])
-	#print primaryFieldName, primaryPrettyFieldName
-	if len(fields) > 1:
-		subFields = fields[1].split(",")
-		subFieldList = dict()
-		for record in subFields:
-			subField = processField(record)
-			subFieldList[subField[0]] = subField[1]
-			
-	else: 
-		subFields = []
-	if len(fields) >= 3:
-		secondaryFieldName,secondaryPrettyFieldName= processField(fields[2])
-	else: 
-		secondaryFieldName = ""
-		secondaryPrettyFieldName = ""
-
-	data = retrieveData(json,primaryFieldName)
-	if not type(data) == type([]):
-		data = [data]
 	
-	if len(subFields) > 0:
-		# We have tags or explicit values we want to match
-		for datarecord in data:
-			if subFieldList.has_key(datarecord) or subFieldList.has_key("*"): 
-				# Expected match was found
-				# Do we need to perform another data fetch:
-				if ((action == "sum" or action == "count" or action == "avg") and not secondaryFieldName == ""):
-					# Retrieve the data from the other field
-					data2 = retrieveData(json, secondaryFieldName)
-					
-					#print "Processing secondary target for ",action,primaryFieldName, datarecord, secondaryFieldName
-					currentValues = processAction(action,currentValues,datarecord,secondaryPrettyFieldName,data2)
-				elif (action == "uniquecount" or action == "totalcount"):
-					data2 = retrieveData(json, secondaryFieldName)
-					currentValues = processAction(action,currentValues,data2,datarecord)
-				else:
-					currentValues = processAction(action,currentValues,datarecord,secondaryPrettyFieldName)
-	else:
-		for datarecord in data:
-			currentValues = processAction(action,currentValues,datarecord,primaryPrettyFieldName) 
-			
-	return currentValues;
 
+def executeOperation(operation, json, records, keys):
+	# Determine the type of operation: key identification, metric extraction, data processing
+
+	# Key identification operations are: return
+	# 	Key identification must always have a target
+	# Data processing operations are: exclude_data, include_data, exclude_key, include_key
+	# 	Data processing must always have a target and a set of comma separated filter operations
+	# Metric extraction operations are: sum, average, mean, count, uniquecount
+	# 	Metric extraction operations must always have a target
+
+
+	action = operation["action"]
+	proceed = True
+	if action == "return":
+		keys = extractKeys(operation, json)
+
+	if action == "sum" or action == "average" or action == "mean" or action == "count" or action == "uniquecount":
+		# Retrieve the data for the target:
+		values = retrieveData(json,operation["target"])
+		for value in values:
+			records = extractMetric(operation, json, records, value)
+
+	if action == "exclude_data" or action == "include_data" or action == "exclude_key" or action == "include_key":
+		proceed = filterData(operation, json, keys)
+
+	return proceed, keys, records
+
+
+def extractReportMetrics(json, report, records):
+	operations = report["operations"]
+	keys = None
+	for operation in operations:
+		proceed, keys, records= executeOperation(operation, json, records, keys)
+
+	outputData = records
+	return outputData
 
 # Takes a dictionary of existing metrics and either appends the metrics with the fields 
 # or creates a new dictionary record based on the json object
 # Returns the metrics dictionary
 def extractMetrics(json, metrics, configs):
-	# outputfile:graphtype:metrictype:fieldname|prettyname:subvalue|prettyname:fieldname2
-	#   fieldname2 should only exist for the countunique, countwhere and sumwhere clauses where a set of subvalues exist
-	#   if using subvalues without fieldname2, only counts should be used
-	# graphtype: line or summary
-	# metrictype: count, uniquecount, totalcount, sum, countwhere, sumwhere
-	# line:uniquecount:interaction.author.username
-	# line:count:interaction.tags:mytag1,mytag2
 
 	# Data should be stored as:
 	# { outputfile : { date : { name : value } } }
 	# or
 	# { outputfile : { metricname : value } 
 
-	for config in configs:
-		#print config
-		config = config.split(":")
-		outputfile = config[0]
-		outputtype = config[1]
-		graphtype = config[2]
-		metrictype = config[3]
-		fields = config[4:]
-
+	for report in configs:
+		outputfile = report["file"]
+		outputtype = report["format"]
+		graphtype = report["type"]
+	
 		# Retrieve the dataset
 		if metrics.has_key(outputfile):
 			outputdata = metrics[outputfile]
@@ -221,15 +272,16 @@ def extractMetrics(json, metrics, configs):
 					metricdata = outputdata[interval]
 				else:
 					metricdata = dict() 
-				metricdata = extractMetricsFromField(json, fields, metricdata, metrictype);	
+
+				metricdata = extractReportMetrics(json,report,metricdata)
 				outputdata[interval] = metricdata;
 				metrics[outputfile] = outputdata
 			else:
 				metricdata = outputdata;
-				metricdata = extractMetricsFromField(json, fields, metricdata, metrictype);	
+				metricdata = extractReportMetrics(json,report,metricdata)
 				metrics[outputfile] = metricdata
-		except:
-			#print "Error processing",json
+		except Exception, e:
+			#print "Exception:",e
 			continue;
 
 	return metrics;
@@ -241,17 +293,12 @@ def processData(datafile,configs):
 	metrics = dict() 
 	count = 0
 	for line in f:
-		try: 
-			json_object = json.loads(line)
-			# Set conditional for time series axes
-			field="interaction.author.username"
-			field="interaction.tags"
-			#extractMetricsFromField(json_object,field)
-			metrics = extractMetrics(json_object, metrics, configs)
-			# Store: date, name, value
-			# Store: name, value
-		except:
-			print "ERROR reading line",count
+		json_object = json.loads(line)
+
+		metrics = extractMetrics(json_object, metrics, configs)
+
+		# Store: date, name, value
+		# Store: name, value
 		count = count + 1
 		if count % 1000 == 0:
 			print count,"lines processed"
