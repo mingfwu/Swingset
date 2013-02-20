@@ -121,13 +121,16 @@ def mapValues(graphInfo):
 	map[global_cfg["template_placeholders"]["placeholder_maxresults"]] = graphInfo["maxresults"]
 	map[global_cfg["template_placeholders"]["placeholder_sorttype"]] = graphInfo["sorttype"]
 	map[global_cfg["template_placeholders"]["placeholder_header"]] = graphInfo["header"]
+	map[global_cfg["template_placeholders"]["placeholder_legend_width"]] = graphInfo["legend_width"]
+	map[global_cfg["template_placeholders"]["placeholder_max_textsize"]] = graphInfo["max_textsize"]
+	map[global_cfg["template_placeholders"]["placeholder_min_textsize"]] = graphInfo["min_textsize"]
 	return map
 
 def getGraphInfo(graph, defaults):
 	
 	graphInfo = {}
 
-	configItems = ["width","height","scale","htmlfile","graphtype","datatype","datafile","enable_sort","enable_truncate","maxresults","sorttype","header"]
+	configItems = ["width","height","scale","htmlfile","graphtype","datatype","datafile","enable_sort","enable_truncate","maxresults","sorttype","header","legend_width","max_textsize","min_textsize"]
 
 	for item in configItems:
 		graphInfo[item] = getValue(item,graph,defaults)

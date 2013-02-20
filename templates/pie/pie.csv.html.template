@@ -13,7 +13,7 @@ body {
 height
 
 var margin = {top: 20, right: 20, bottom: 30, left: 50},
-    graphlegend = {width: 150, height: 20},
+    graphlegend = {width: ||PLACEHOLDER_LEGEND_WIDTH||, height: 20},
     header = {height: 50},
     width = ||PLACEHOLDER_WIDTH|| - margin.left - margin.right,
     chartwidth = width - graphlegend.width,
