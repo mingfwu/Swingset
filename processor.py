@@ -214,11 +214,11 @@ def extractMetric(operation, json, records, value, key=None):
 
 def extractTokens(operation, values):
 	if operation.has_key("min_length"):
-		minLength = operation["min_length"]
+		minLength = float(operation["min_length"])
 	else:
 		minLength = 4
 	if operation.has_key("max_length"):
-		maxLength = operation["max_length"]
+		maxLength = float(operation["max_length"])
 	else:
 		maxLength = 100
 
@@ -228,7 +228,7 @@ def extractTokens(operation, values):
 		valuetokens = value.replace(',',' ').split(' ')
 		for token in valuetokens:
 			if len(token) >= minLength and len(token) <= maxLength:
-				tokens.append(token)
+				tokens.append(token.upper())
 		
 	return tokens
 
@@ -251,19 +251,19 @@ def filterData(operation, json, keys):
 		specifiedKeys = operation["values"].split(",")
 		returnedKeys = []
 		for key in specifiedKeys:
-			if key in keys:
-				if action == "include_key":
-					# This is a desired key. include it
-					returnedKeys.append(key)
-			elif action == "exclude_key":
-				# We didn't match the key so include it
-				returnedKeys.append(keyu)
+			if action == "include_key" and key in keys:
+				# This is a desired key. include it
+				returnedKeys.append(key)
+			elif action == "exclude_key" and key in keys:
+				keys.pop(key)
+		if action == "exclude_key":
+			returnedKeys = keys
 		if len(returnedKeys) == 0:
 			proceed = False;
 		return proceed, returnedKeys
 	if action == "exclude_data" or action == "include_data":
 		dataFilters = operation["values"].split(",")
-		data = rerieveData(json, operation["target"])
+		data = retrieveData(json, operation["target"])
 		filtertype = operation["comparator"]
 		# comparator can be equals, contains, gt, ge, lt, le
 		for filter in dataFilters:
@@ -271,22 +271,28 @@ def filterData(operation, json, keys):
 				criteriaMet = False;
 				if filtertype == "equals" and record == filter:
 					criteriaMet = True
+					break
 				elif filtertype == "contains" and record.find(filter) != -1:
 					criteriaMet = True
+					break
 				elif filtertype == "gt" and float(record) > float(filter):
 					criteriaMet = True
+					break
 				elif filtertype == "ge" and float(record) >= float(filter):
 					criteriaMet = True
+					break
 				elif filtertype == "lt" and float(record) < float(filter):
 					criteriaMet = True
+					break
 				elif filtertype == "le" and float(record) <= float(filter):
 					criteriaMet = True
-				if action == "exclude_data" and criteriaMet:
-					proceed = False
-				if action == "include_data" and criteriaMet:
-					proceed = True
-				return proceed
-	return proceed
+			if criteriaMet:
+				break
+		if action == "exclude_data" and criteriaMet:
+			proceed = False
+		if action == "include_data" and criteriaMet:
+			proceed = True
+	return proceed,keys
 	
 
 				 

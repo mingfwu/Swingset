@@ -7,7 +7,7 @@
   var fill = ||PLACEHOLDER_SCALE||
 
   var header = {height: 50},
-    	height = ||PLACEHOLDER__HEIGHT|| - header.height,
+    	height = ||PLACEHOLDER_HEIGHT|| - header.height,
     	width = ||PLACEHOLDER_WIDTH||;
 
   var cloud = d3.select("body").append("svg")
