@@ -4,18 +4,18 @@ import sys, os, time, json, csv, ConfigParser
 import datetime, bisect, collections
 
 if len(sys.argv)  < 3:
-	print "Usage:",sys.argv[0]," [config file] [data file]"
+	print "Usage:",sys.argv[0]," [config file] [data prefix]"
 	sys.exit(2);
 
 def main():
 	configFile = sys.argv[1]
-	dataFile = sys.argv[2]
+	dataPrefix = sys.argv[2]
 	globalConfigFile = "globals.cfg"
 
 	print "GLOBAL CONFIG FILE: ", globalConfigFile
 	print "CONFIG FILE: ", configFile
-	print "DATA FILE: ", dataFile
-	if (not validateFile(configFile) or not validateFile(dataFile) or not validateFile(globalConfigFile)):
+	print "DATA PREFIX: ", dataPrefix 
+	if (not validateFile(configFile) or not validateFile(globalConfigFile)):
 		sys.exit(1)
 
 	# Set Globals
@@ -26,7 +26,7 @@ def main():
 	#print configs, reportConfigs
 	
 	# Run
-	metrics = processData(dataFile,reportConfigs)
+	metrics = processData(dataPrefix,reportConfigs)
 	#print metrics
 
 	outputData(metrics,reportConfigs)
@@ -386,24 +386,37 @@ def extractMetrics(json, metrics, configs):
 
 	return metrics;
 
+def getTargets(prefix):
+	fileDir = os.path.dirname(prefix)
+	prefixname = os.path.basename(prefix)
+	targets = []
+	for file in os.listdir(fileDir):
+		if file.find(prefixname) == 0:
+			targets.append(fileDir+'/'+file)
+
+	return targets
 	
-def processData(datafile,configs):
-	f = open(datafile, 'r')
-	
-	metrics = dict() 
+def processData(dataPrefix,configs):
+	targets = getTargets(dataPrefix)
 	count = 0
-	for line in f:
-		json_object = json.loads(line)
+	metrics = dict() 
 
-		metrics = extractMetrics(json_object, metrics, configs)
-
-		# Store: date, name, value
-		# Store: name, value
-		count = count + 1
-		if count % 1000 == 0:
-			print count,"lines processed"
-
-	f.close()
+	for target in targets:
+		print "Processing",target
+		f = open(target, 'r')
+		
+		for line in f:
+			json_object = json.loads(line)
+	
+			metrics = extractMetrics(json_object, metrics, configs)
+	
+			# Store: date, name, value
+			# Store: name, value
+			count = count + 1
+			if count % 1000 == 0:
+				print count,"lines processed"
+	
+		f.close()
 	return metrics
 
 def getValues(metric, values):
