@@ -41,6 +41,21 @@ def setGlobals(configFile):
 		template_placeholders[record[0]] = record[1]
 	global_cfg["template_placeholders"] = template_placeholders
 
+	defaults = {}
+	templates = {}
+
+	if config.has_section("template_defaults"):
+		for defaultrecord in config.items("template_defaults"):
+			defaults[defaultrecord[0]] = defaultrecord[1]
+
+	if config.has_section("templates"):
+		for templaterecord in config.items("templates"):
+			templates[templaterecord[0]] = templaterecord[1]
+
+	defaults["templates"] = templates
+	global_cfg["defaults"] = defaults
+
+
 def loadGraph(configFile,graphName):
 	graph = {}
 	for config in configFile.items(graphName):
@@ -50,17 +65,21 @@ def loadGraph(configFile,graphName):
 def loadLayout(configFile):
 	config = ConfigParser.ConfigParser()
 	config.readfp(open(configFile))
-	defaults = {}
+	defaults = global_cfg["defaults"]
+	templates = defaults["templates"]
 	layout = []
 	graphs = {}
-	templates = {}
 
-	for defaultrecord in config.items("template_defaults"):
-		defaults[defaultrecord[0]] = defaultrecord[1]
 
-	for templaterecord in config.items("templates"):
-		templates[templaterecord[0]] = templaterecord[1]
-	defaults["templates"] = templates
+	# Legacy in case the templates still contain the globals
+	if config.has_section("template_defaults"):
+		for defaultrecord in config.items("template_defaults"):
+			defaults[defaultrecord[0]] = defaultrecord[1]
+
+	if config.has_section("templates"):
+		for templaterecord in config.items("templates"):
+			templates[templaterecord[0]] = templaterecord[1]
+		defaults["templates"] = templates
 		
 
 	for layoutrecord in config.items("layout"):
