@@ -65,7 +65,8 @@ def loadConfigs(configFile):
 
 def validateReportConfig(name, configItems):
 	validConfig = True
-	configParams = [ "operations", "file", "format", "type" ]
+	# Removing format requirement for now
+	configParams = [ "operations", "file", "type" ]
 	reportConfig = {}
 	for param in configParams:
 		if not configItems.has_key(param):
@@ -75,7 +76,7 @@ def validateReportConfig(name, configItems):
 		else:
 			reportConfig[param] = configItems[param]	
 
-	if not reportConfig["type"] in ['summary','line']:
+	if not reportConfig["type"] in ['summary','line','text']:
 		validConfig = False
 		print 'ERROR: Report "',name,'" : "type" field contains an invalid value. must be in: line, summary'
 
@@ -107,6 +108,11 @@ def loadReportConfig(name, config):
 	if not validConfig or not validOperations or not containsSummary:
 		return True,reportConfig
 	else: 
+		# Flush the existing file if there is a file of type text which is appended to
+		if reportConfig["type"] in ['text']:
+			f = open(reportConfig["file"],'wb')
+			f.close()
+
 		return False,reportConfig
 
 def validateOperationParams(reportname, opname, operation, requiredParams, optionalParams):
@@ -130,29 +136,40 @@ def validateOperationConfig(reportname, opname, operation):
 	summaryOperation = False
 
 	# Every operation requires an action and target
-	if not operation.has_key("action") or not operation.has_key("target"):
-		print "*** ERROR:",reportname,":",opname,"does not contain an action or target"
+	if not operation.has_key("action"): 
+		print "*** ERROR:",reportname,":",opname,"does not contain an action"
 		sys.exit(2)
 
 	# Allowed actions: include_data, exclude_data, include_key, exclude_key, return, return_tokens, sum, average, mean, count, uniquecount
-	if operation["action"] in ['include_data','exclude_data','include_key','exclude_key']:
-		requiredParams=['comparator','values']
+	if operation["action"] in ['include_data','exclude_data']:
+		requiredParams=['target','comparator','values']
+		optionalParams=[]
+		validConfig = validateOperationParams(reportname, opname, operation, requiredParams, optionalParams)
+
+	elif operation["action"] in ['include_key','exclude_key']:
+		requiredParams=['target','values']
 		optionalParams=[]
 		validConfig = validateOperationParams(reportname, opname, operation, requiredParams, optionalParams)
 
 	elif operation["action"] in ['return']:
-		requiredParams=[]
+		requiredParams=['target']
 		optionalParams=[]
 		validConfig = validateOperationParams(reportname, opname, operation, requiredParams, optionalParams)
 
+	elif operation["action"] in ['print']:
+		requiredParams=['targets']
+		optionalParams=[]
+		validConfig = validateOperationParams(reportname, opname, operation, requiredParams, optionalParams)
+		summaryOperation = True
+
 	elif operation["action"] in ['return_tokens']:
-		requiredParams=[]
+		requiredParams=['target']
 		optionalParams=['min_length','max_length']
 		validConfig = validateOperationParams(reportname, opname, operation, requiredParams, optionalParams)
 
 	elif operation["action"] in ['sum','average','count','uniquecount','mean']:
 		summaryOperation = True
-		requiredParams = []
+		requiredParams = ['target']
 		optionalParams = ['legend']
 		validConfig = validateOperationParams(reportname, opname, operation, requiredParams, optionalParams)
 
@@ -164,7 +181,7 @@ def validateOperationConfig(reportname, opname, operation):
 
 
 def loadOperation(reportname,opname,config):
-	opParams = ["action","target","legend","filter","values","comparator","min_length","max_length"]
+	opParams = ["action","target","targets","legend","filter","values","comparator","min_length","max_length"]
 	operation = {}
 	operation["_config"] = reportname 
 	operation["_operation"] = opname
@@ -367,7 +384,7 @@ def filterData(operation, json, keys):
 	
 	
 
-def executeOperation(operation, json, records, keys):
+def executeOperation(operation, json, records, keys, report):
 	# Determine the type of operation: key identification, metric extraction, data processing
 
 	# Key identification operations are: return
@@ -380,10 +397,14 @@ def executeOperation(operation, json, records, keys):
 
 	action = operation["action"]
 	proceed = True
+
+	if action == "print":
+		records = performPrint(operation,json, report) 
+
 	if action == "return" or action == "return_tokens":
 		keys = extractKeys(operation, json)
 
-	if action == "sum" or action == "average" or action == "mean" or action == "count" or action == "uniquecount":
+	elif action == "sum" or action == "average" or action == "mean" or action == "count" or action == "uniquecount":
 		# Retrieve the data for the target:
 		values = retrieveData(json,operation["target"])
 		if keys == None:
@@ -394,7 +415,7 @@ def executeOperation(operation, json, records, keys):
 				for value in values:
 					records = extractMetric(operation, json, records, value, key)
 
-	if action == "exclude_data" or action == "include_data" or action == "exclude_key" or action == "include_key":
+	elif action == "exclude_data" or action == "include_data" or action == "exclude_key" or action == "include_key":
 		proceed, keys = filterData(operation, json, keys)
 
 	return proceed, keys, records
@@ -404,7 +425,7 @@ def extractReportMetrics(json, report, records):
 	operations = report["operations"]
 	keys = None
 	for operation in operations:
-		proceed, keys, records = executeOperation(operation, json, records, keys)
+		proceed, keys, records = executeOperation(operation, json, records, keys, report)
 		if not proceed:
 			#print "extractReportMetric : criteria not met"
 			break
@@ -453,6 +474,26 @@ def extractMetrics(json, metrics, configs):
 			continue;
 
 	return metrics;
+
+def performPrint(operation,json,report):
+	f = open(report["file"],'ab')
+	lines=[]
+	for target in operation["targets"].split(','):
+		target = target.strip()
+		try: 
+			targetData = retrieveData(json,target)	
+			if type(targetData) == type(str):
+				lines.append(target.upper()+':\t\t' + targetData+'\n')
+			else:
+				for record in targetData:
+					lines.append(target.upper()+':\t\t' + record+'\n')
+		except Exception, e:
+			continue
+	if len(lines) > 0:
+		lines.append("\n")
+		f.writelines(lines)
+	f.close()
+
 
 def getTargets(prefix):
 	fileDir = os.path.dirname(prefix)
@@ -533,9 +574,13 @@ def outputData(metrics,configs):
 	files = dict()
 	#print metrics
 	for report in configs:
-                outputfile = report["file"]
-                outputtype = report["format"]
-                graphtype = report["type"]
+		outputfile = report["file"]
+        	outputtype = report["format"]
+        	graphtype = report["type"]
+
+        	if graphtype == "text":
+	        	# The file should have already been genearted
+        		continue
 
 		# The metric type will be determined by the last operation executed
 		finalOperation = report["operations"][len(report["operations"])-1]
