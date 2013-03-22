@@ -48,12 +48,18 @@ def loadConfigs(configFile):
 		if record[0] == "reports": 
 			configs=record[1].split(',')
 
+	configError = False;
 	reportConfigs = [];
 	for item in configs:
-		print "Loading config :",item
-		reportConfig = loadReportConfig(item, config.items(item))
+		#print "Loading config :",item
+		configErrorExists,reportConfig = loadReportConfig(item, config.items(item))
+		if configErrorExists:
+			configError = True
 		reportConfigs.append(reportConfig)
-	
+
+	if configError:
+		print "Configuration errors exist. Please review errors and correct before running again"
+		sys.exit(2)
 
 	return configs, reportConfigs
 
@@ -63,10 +69,17 @@ def validateReportConfig(name, configItems):
 	reportConfig = {}
 	for param in configParams:
 		if not configItems.has_key(param):
-			print "ERROR:",name,"is missing value for",param
+			print 'ERROR: REPORT "', name,'" does not contain an entry for the "',param,'" field'
+			sys.exit(2)
 			validConfig = False
 		else:
 			reportConfig[param] = configItems[param]	
+
+	if not reportConfig["type"] in ['summary','line']:
+		validConfig = False
+		print 'ERROR: Report "',name,'" : "type" field contains an invalid value. must be in: line, summary'
+
+
 	return validConfig, reportConfig
 
 	
@@ -78,21 +91,76 @@ def loadReportConfig(name, config):
 	validConfig, reportConfig = validateReportConfig(name, configItems)
 	operations = []
 
+	validOperations = True
+	containsSummary = False
+
 	for operation in configItems["operations"].split(","):
-		operations.append(loadOperation(name, operation,configItems))
+		summaryOperation, validOperation,loadedOperation = loadOperation(name, operation,configItems)
+		if not validOperation: 
+			validOperations = False
+		if summaryOperation:
+			containsSummary = True
+		operations.append(loadedOperation)
 
 	reportConfig["operations"] = operations
 
-	return reportConfig
+	if not validConfig or not validOperations or not containsSummary:
+		return True,reportConfig
+	else: 
+		return False,reportConfig
+
+def validateOperationParams(reportname, opname, operation, requiredParams, optionalParams):
+	validConfig = True
+	for field in requiredParams:
+		if not operation.has_key(field):
+			validConfig = False
+			print '*** ERROR: Report "',reportname,'" : Operation "',opname,'" : Field "',field,'" not found'
+		if field == 'comparator':
+			if not operation[field] in ['equals','contains','gt','ge','lt','le']:
+				print '*** ERROR: Report "',reportname,'" : Operation "',opname,'" : "',field,'" contains invalid value. must be in: equals, contains, gt, ge, lt, le'
+				validConfig = False
+	for field in optionalParams:
+		if not operation.has_key(field):
+			#print 'INFO : Report "',reportname,'" : Operation "',opname,'" : Optional Field "',field,'" not found'
+			continue
+	return validConfig
 
 	
-def validateOperationConfig(reportname, opname, configItems, params): 
-	validConfig = True
-	#for param in params:
-	#	if not configItems.has_key(param):
-	#		print "ERROR:",reportname,":",opname,"is missing value for",param
-	#		validConfig = False
-	return validConfig
+def validateOperationConfig(reportname, opname, operation): 
+	summaryOperation = False
+
+	# Every operation requires an action and target
+	if not operation.has_key("action") or not operation.has_key("target"):
+		print "*** ERROR:",reportname,":",opname,"does not contain an action or target"
+		sys.exit(2)
+
+	# Allowed actions: include_data, exclude_data, include_key, exclude_key, return, return_tokens, sum, average, mean, count, uniquecount
+	if operation["action"] in ['include_data','exclude_data','include_key','exclude_key']:
+		requiredParams=['comparator','values']
+		optionalParams=[]
+		validConfig = validateOperationParams(reportname, opname, operation, requiredParams, optionalParams)
+
+	elif operation["action"] in ['return']:
+		requiredParams=[]
+		optionalParams=[]
+		validConfig = validateOperationParams(reportname, opname, operation, requiredParams, optionalParams)
+
+	elif operation["action"] in ['return_tokens']:
+		requiredParams=[]
+		optionalParams=['min_length','max_length']
+		validConfig = validateOperationParams(reportname, opname, operation, requiredParams, optionalParams)
+
+	elif operation["action"] in ['sum','average','count','uniquecount','mean']:
+		summaryOperation = True
+		requiredParams = []
+		optionalParams = ['legend']
+		validConfig = validateOperationParams(reportname, opname, operation, requiredParams, optionalParams)
+
+	else:
+		validConfig = False
+		print '** ERROR Report: "',reportname,'" : Operation "',opname,'" invalid action specified. Allowed actions are: sum, average, count, uniquecount, return, return_tokens, include_key, exclude_key, include_data, exclude_data'
+
+	return summaryOperation,validConfig
 
 
 def loadOperation(reportname,opname,config):
@@ -105,8 +173,8 @@ def loadOperation(reportname,opname,config):
 		if config.has_key(paramName):
 			operation[param] = config[paramName]
 
-	validateOperationConfig(reportname, opname, operation, opParams)
-	return operation
+	isActionConfig, isValidConfig = validateOperationConfig(reportname, opname, operation)
+	return isActionConfig, isValidConfig, operation
 	
 
 def validateFile(file): 
