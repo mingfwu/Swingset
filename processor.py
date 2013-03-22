@@ -445,7 +445,8 @@ def extractMetrics(json, metrics, configs):
 
 	for report in configs:
 		outputfile = report["file"]
-		outputtype = report["format"]
+		#outputtype = report["format"]
+		outputtype = 'csv'
 		graphtype = report["type"]
 	
 		# Retrieve the dataset
@@ -575,7 +576,8 @@ def outputData(metrics,configs):
 	#print metrics
 	for report in configs:
 		outputfile = report["file"]
-        	outputtype = report["format"]
+        	#outputtype = report["format"]
+		outputtype = 'csv'
         	graphtype = report["type"]
 
         	if graphtype == "text":
