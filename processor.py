@@ -147,7 +147,7 @@ def validateOperationConfig(reportname, opname, operation):
 		validConfig = validateOperationParams(reportname, opname, operation, requiredParams, optionalParams)
 
 	elif operation["action"] in ['include_key','exclude_key']:
-		requiredParams=['target','values']
+		requiredParams=['values']
 		optionalParams=[]
 		validConfig = validateOperationParams(reportname, opname, operation, requiredParams, optionalParams)
 
