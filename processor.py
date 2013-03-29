@@ -550,7 +550,7 @@ def writeData(graphType,data,outputWriter,type,metric):
 					record = [datestring, k, getValues(metric, v)]
 					writeFormatData(record,outputWriter,type)
 				except:
-					print "Error occurred writing for",graphType,type, metric, datestring, k, v
+					#print "Error occurred writing for",graphType,type, metric, datestring, k, v
 					continue;
 	else:
 		for k,v in data.iteritems():
@@ -558,7 +558,7 @@ def writeData(graphType,data,outputWriter,type,metric):
 				record = [k,getValues(metric, v)]
 				writeFormatData(record,outputWriter,type)
 			except:
-				print "Error occurred writing for ",graphType, type, metric, k, v
+				#print "Error occurred writing for ",graphType, type, metric, k, v
 				continue;
 
 	
