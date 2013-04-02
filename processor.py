@@ -233,7 +233,54 @@ def cleanseData(jsondata):
 			count = count + 1
 	return jsondata
 
-def retrieveData(jsondata,field):
+def retrieveData(jsondata,fields):
+	currentdata = ''
+	for field in fields.split(","):
+		retrieveddata = retrieveFieldData(jsondata,field)
+		# Three scenarios: Symmetrical arrays, String and array, Array and string
+		# If one of these scenarios isn't matched, then we abort and just take the values that we have
+		if currentdata == '':
+			currentdata = retrieveddata
+		elif type(retrieveddata) == type([]) and type(currentdata) == type([]):
+			# Check to see if the lengths are the same. Then, append retrieveddata to currentdata
+			if len(retrieveddata) == len(currentdata):
+				count = 0
+				while count < len(currentdata):
+					if retrieveddata[count] == None:
+						jsonvalue=''
+					else:
+						jsonvalue = str(retrieveddata[count])
+					if currentdata[count] == None:
+						currentvalue = ''
+					else:
+						currentvalue = str(currentdata[count])
+					currentdata[count] = (currentvalue + ' ' + jsonvalue).strip()
+					count += 1
+		elif type(retrieveddata) == type([]) and type(currentdata) == type(str()):
+			count = 0
+			while count < len(retrieveddata):
+				if retrieveddata[count] == None:
+					jsonvalue=''
+				else:
+					jsonvalue = str(retrieveddata[count])
+				retrieveddata[count] = (currentdata + ' ' + jsonvalue).strip()
+				count += 1
+			currentdata = retrieveddata
+		elif type(retrieveddata) == type(str()) and type(currentdata) == type([]):
+			count = 0
+			while count < len(retrieveddata):
+				if currentdata[count] == None:
+					currentvalue = ''
+				else:
+					currentvalue = str(currentdata[count])
+				currentdata[count] = (currentvalue + ' ' + retrieveddata).strip()
+				count += 1
+		else:
+			currentdata = retrieveddata
+	return currentdata
+		
+
+def retrieveFieldData(jsondata,field):
 	fieldHierarchy = field.split(".")
 	for subField in fieldHierarchy:
 		if type(jsondata) == type([]):
@@ -354,10 +401,16 @@ def filterData(operation, json, keys):
 		for filter in dataFilters:
 			for record in data:
 				criteriaMet = False;
-				if filtertype == "equals" and record == filter:
-					criteriaMet = True
-					break
-				elif filtertype == "contains" and record.find(filter) != -1:
+				if filtertype == "equals":
+					if type(record) == type(str()):
+						if record.upper() == filter.upper():
+							criteriaMet = True
+							break
+					else:
+						if record == filter:
+							criteriaMet = True
+							break
+				elif filtertype == "contains" and record.upper().find(filter.upper()) != -1:
 					criteriaMet = True
 					break
 				elif filtertype == "gt" and float(record) > float(filter):
@@ -483,7 +536,7 @@ def performPrint(operation,json,report):
 		target = target.strip()
 		try: 
 			targetData = retrieveData(json,target)	
-			if type(targetData) == type(str):
+			if type(targetData) == type(str()):
 				lines.append(target.upper()+':\t\t' + targetData+'\n')
 			else:
 				for record in targetData:
@@ -512,7 +565,7 @@ def processData(dataPrefix,configs):
 	metrics = dict() 
 
 	for target in targets:
-		print "Processing",target
+		#print "Processing",target
 		f = open(target, 'r')
 		
 		for line in f:
@@ -553,7 +606,34 @@ def writeData(graphType,data,outputWriter,type,metric):
 					#print "Error occurred writing for",graphType,type, metric, datestring, k, v
 					continue;
 	else:
-		for k,v in data.iteritems():
+		# Inserting code here to manipulate and normalize case
+		new_data = {}
+
+		for k, v in data.iteritems():
+			if new_data.has_key(k.upper()):
+				#print "Merging data for",k,v,new_data[k.upper()][1]
+				key = new_data[k.upper()][0]
+				if not isinstance(v, dict):
+					value = new_data[k.upper()][1] + v
+				else:
+					# The value is either a uniquekey or averagekey
+					dictvalue = new_data[k.upper()][1]
+					if dictvalue.has_key(global_cfg["uniquekey"]):
+						keys = dict(dictvalue["keys"].items() + v["keys"].items())
+						#uniquekeys = dictvalue[global_cfg["uniquekey"]] + v[global_cfg["uniquekey"]]
+						uniquekeys = len(keys)
+						value = { global_cfg["uniquekey"]: uniquekeys, "keys":keys }
+					elif dictvalue.has_key(global_cfg["avgkey"]):
+						values = dictvalue[global_cfg["avgkey"]]
+						value = { global_cfg["avgkey"]: [values] }
+			
+				new_data[k.upper()] = [key, value]
+			else:
+				new_data[k.upper()] = [k,v]
+				
+		for data in new_data.values():
+			k = data[0]
+			v = data[1]
 			try: 
 				record = [k,getValues(metric, v)]
 				writeFormatData(record,outputWriter,type)
@@ -617,7 +697,6 @@ def outputData(metrics,configs):
 			
 		if metrics.has_key(outputfile):
 			data = metrics[outputfile]
-
 			writeData(graphtype,data,outputwriter,outputtype,metrictype);
 		
 		f.close()
