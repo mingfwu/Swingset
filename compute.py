@@ -7,42 +7,90 @@ if len(sys.argv)  < 2:
         print "Usage:",sys.argv[0]," [config file]" 
         sys.exit(2);
 
-def old_main():
+global valueThreshold,precision
+valueThreshold = 3
+precision=3
+
+def main():
         configFile = sys.argv[1]
         globalConfigFile = "globals.cfg"
 
-        print "GLOBAL CONFIG FILE: ", globalConfigFile
+        #print "GLOBAL CONFIG FILE: ", globalConfigFile
         print "CONFIG FILE: ", configFile
-        if (not validateFile(configFile) or not validateFile(globalConfigFile)):
+        #if (not validateFile(configFile) or not validateFile(globalConfigFile)):
+	if not validateFile(configFile):
                 sys.exit(1)
 
         # Set Globals
-        globals = setGlobals(globalConfigFile)
+        #globals = setGlobals(globalConfigFile)
 
         # Load Template Config
-        templateDefaults, layout, graphs, outputfile = loadLayout(configFile)   
+        reportNames, reports, outputFile = loadConfigs(configFile)   
         
-        # Render graphs
-        renderGraphs(graphs, templateDefaults)
-
-        # Render layout
-        renderHTML(layout, graphs, templateDefaults, outputfile)
-
-def main():
-	reports = { 'gen_pop_baseline':'gp_entities.csv', 'wi_baseline':'wi_entities.csv'}
-	targetFile = "test.csv"
 	data = {}
-	dir = sys.argv[1]
-	for name,file in reports.iteritems():
-		file = dir +'/'+file
+	for name in reportNames:
+		file = reports[name]
 		totals, records = loadBaseline(file)
 		averages, mean, median = calcStats(totals, records)
-		thresholdOptions = [mean, median, 2]
+		thresholdOptions = [mean, median, valueThreshold]
 		filteredVals = filterVals(averages, thresholdOptions)
 		data[name] = { 'values':averages, 'filtered_values':filteredVals, 'mean':mean, 'median':median }
 	outputData = extractData(data)
-	headers = ["name"] + reports.keys()
-	writeData(headers,targetFile,outputData)
+	headers = ["name"] + reportNames
+	writeData(headers,outputFile,outputData)
+
+def validateFile(file): 
+	if not os.path.isfile(file):
+		print file, "could not be found"
+		return False
+	else:
+		return True
+
+def setGlobals(configFile):
+	config = ConfigParser.ConfigParser()
+	config.readfp(open(configFile))
+	global global_cfg
+	global_cfg = {}
+	for record in config.items("globals"):
+		global_cfg[record[0]] = record[1]
+	
+	
+
+def loadConfigs(configFile):
+	config = ConfigParser.ConfigParser()
+	config.readfp(open(configFile))
+	configItems = {}
+	
+	for record in config.items("config"):
+		if record[0] == "reports": 
+			configs=record[1].split(',')
+		elif record[0] == "outputfile":
+			outputFile = record[1]
+		elif record[0] == "valuethreshold":
+			global valueThreshold
+			valueThreshold = int(record[1])
+		elif record[0] == "precision":
+			global precision
+			precision = int(record[1])
+		else:
+			configItems[record[0]] = record[1]
+
+	reportNames = []
+	reports = {}
+	for item in configs:
+		nameKey = item+'_name'
+		valueKey = item+'_value'
+		
+		reportName = configItems[nameKey]
+		fileName = configItems[valueKey]
+		if not validateFile(fileName):
+			print "WARNING:",reportName,"file",fileName,"does not exist"
+
+		reports[reportName] = fileName	
+		reportNames.append(reportName)
+
+	return reportNames, reports, outputFile
+
 
 def writeData(headers, file,output):
 	f = open(file, 'wb')
@@ -65,9 +113,9 @@ def extractData(data):
 		values = {"name":key}
 		for setName, setValues in data.iteritems():
 			if setValues["values"].has_key(key):
-				values[setName] = setValues["values"][key]
+				values[setName] = round(setValues["values"][key],precision)
 			else:
-				values[setName] = ''
+				values[setName] = 0
 		output[key] = values	
 	return output
 		
@@ -88,6 +136,7 @@ def loadBaseline(file):
 	baselineRecords = {}
 	headers=['date','name','value']
  	f = open(file,'rb') 
+	print "Loading data from",file
 	reader = csv.DictReader(f)
 	count = 0
 	for row in reader:
@@ -98,8 +147,8 @@ def loadBaseline(file):
 			baselineTotal[row["name"]] = float(row["value"])
 			baselineRecords[row["name"]] = 1
 		count += 1
-		if count % 100 == 0:
-			print count, "records processed"
+		#if count % 100 == 0:
+		#	print count, "records processed"
 	f.close()
 	return baselineTotal, baselineRecords
 
